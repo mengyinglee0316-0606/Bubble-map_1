@@ -114,7 +114,13 @@ d3.csv("https://raw.githubusercontent.com/davidmegginson/ourairports-data/master
   country: d.iso_country
 }))
   .then((rows) =>
-    rows.filter(d => d.country === "US" && Number.isFinite(d.lat) && Number.isFinite(d.lon))
+    rows.filter(d =>
+      d.country === "US" &&
+      d.type === "large_airport" &&
+      d.iata &&
+      Number.isFinite(d.lat) &&
+      Number.isFinite(d.lon)
+    )
   )
 )}
 
