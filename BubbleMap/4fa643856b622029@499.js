@@ -1,185 +1,188 @@
 function _1(md){return(
 md`<div style="color: grey; font: 13px/25.5px var(--sans-serif); text-transform: uppercase;"><h1 style="display: none;">Bubble map</h1><a href="https://d3js.org/">D3</a> › <a href="/@d3/gallery">Gallery</a></div>
 
-# Bubble map
+# 美國機場 Bubble Map
 
-Estimated population by county, 2016. See also the [spike map](/@d3/spike-map) as an alternative presentation of this data. Data: [American Community Survey](https://api.census.gov/data/2016/acs/acs5/cprofile/examples.html)`
+以泡泡標示全美機場位置，點擊泡泡可查看機場資訊。資料來源： [OurAirports](https://ourairports.com/)`
 )}
 
-function _chart(population,countymap,statemap,d3,topojson,us,centroid)
+function _chart(airports,d3,topojson,us)
 {
+  const width = 975;
+  const height = 610;
 
-  // Join the geographic shapes and the population data.
-  const data = population.map((d) => ({
-    ...d,
-    county: countymap.get(d.fips),
-    state: statemap.get(d.state)
-  }))
-    .filter(d => d.county)
-    .sort((a, b) => d3.descending(a.population, b.population));
-
-  // Construct the radius scale.
-  const radius = d3.scaleSqrt([0, d3.max(data, d => d.population)], [0, 40]);
-
-  // Construct a path generator.
-  const path = d3.geoPath();
+  const projection = d3.geoAlbersUsa();
+  const path = d3.geoPath(projection);
 
   // Create the SVG container. Its dimensions correspond to the bounding-box
   // of the pre-projected US shapefile. 
   const svg = d3.create("svg")
-      .attr("width", 975)
-      .attr("height", 610)
-      .attr("viewBox", [0, 0, 975, 610])
+      .attr("width", width)
+      .attr("height", height)
+      .attr("viewBox", [0, 0, width, height])
       .attr("style", "width: 100%; height: auto; height: intrinsic;");
+
+  const nation = topojson.feature(us, us.objects.nation);
+  const statesGeo = topojson.feature(us, us.objects.states).features;
+  const statesMesh = topojson.mesh(us, us.objects.states, (a, b) => a !== b);
+  projection.fitSize([width, height], nation);
 
   // Create the cartographic background layers.
   svg.append("path")
-      .datum(topojson.feature(us, us.objects.nation))
+      .datum(nation)
+      .attr("fill", "#eee")
+      .attr("d", path);
+
+  const statePaths = svg.append("g")
+    .selectAll("path")
+    .data(statesGeo)
+    .join("path")
       .attr("fill", "#ddd")
+      .attr("stroke", "white")
+      .attr("stroke-linejoin", "round")
       .attr("d", path);
 
   svg.append("path")
-      .datum(topojson.mesh(us, us.objects.states, (a, b) => a !== b))
+      .datum(statesMesh)
       .attr("fill", "none")
       .attr("stroke", "white")
       .attr("stroke-linejoin", "round")
       .attr("d", path);
 
-  // Create the legend.
-  const legend = svg.append("g")
-      .attr("fill", "#777")
-      .attr("transform", "translate(915,608)")
-      .attr("text-anchor", "middle")
-      .style("font", "10px sans-serif")
-    .selectAll()
-      .data(radius.ticks(4).slice(1))
-    .join("g");
+  const radiusByType = new Map([
+    ["large_airport", 6],
+    ["medium_airport", 4],
+    ["small_airport", 2.5],
+    ["heliport", 2],
+    ["seaplane_base", 2],
+    ["balloonport", 2],
+    ["closed", 1.5]
+  ]);
 
-  legend.append("circle")
-      .attr("fill", "none")
-      .attr("stroke", "#ccc")
-      .attr("cy", d => -radius(d))
-      .attr("r", radius);
+  const tooltip = d3.select("body")
+    .append("div")
+    .attr("class", "airport-tooltip")
+    .style("position", "absolute")
+    .style("pointer-events", "none")
+    .style("background", "rgba(0, 0, 0, 0.75)")
+    .style("color", "#fff")
+    .style("padding", "8px 10px")
+    .style("border-radius", "6px")
+    .style("font", "12px/1.4 sans-serif")
+    .style("opacity", 0);
 
-  legend.append("text")
-      .attr("y", d => -2 * radius(d))
-      .attr("dy", "1.3em")
-      .text(radius.tickFormat(4, "s"));
+  const points = airports
+    .map((airport) => {
+      const coords = projection([airport.lon, airport.lat]);
+      return coords ? { ...airport, coords } : null;
+    })
+    .filter(Boolean);
 
-  // Add a circle for each county, with a title (tooltip).
-  const format = d3.format(",.0f");
+  const stateById = new Map(statesGeo.map((state) => [state.id, state]));
+  const statePathById = new Map();
+  statePaths.each(function(state) {
+    statePathById.set(state.id, d3.select(this));
+  });
+
+  let activeStateId = null;
+
+  const resetStateHighlight = () => {
+    if (activeStateId == null) return;
+    const path = statePathById.get(activeStateId);
+    if (path) {
+      path.attr("fill", "#ddd");
+    }
+    activeStateId = null;
+  };
+
   svg.append("g")
-      .attr("fill", "brown")
-      .attr("fill-opacity", 0.5)
+      .attr("fill", "#1f77b4")
+      .attr("fill-opacity", 0.7)
       .attr("stroke", "#fff")
       .attr("stroke-width", 0.5)
     .selectAll()
-    .data(data)
+    .data(points)
     .join("circle")
-      .attr("transform", d => `translate(${centroid(d.county)})`)
-      .attr("r", d => radius(d.population))
-    .append("title")
-      .text(d => `${d.county.properties.name}, ${d.state.properties.name}
-${format(d.population)}`);
+      .attr("cx", d => d.coords[0])
+      .attr("cy", d => d.coords[1])
+      .attr("r", d => radiusByType.get(d.type) ?? 2)
+      .on("mouseenter", (event, d) => {
+        const stateFeature = statesGeo.find((state) =>
+          d3.geoContains(state, [d.lon, d.lat])
+        );
+        if (stateFeature && stateFeature.id !== activeStateId) {
+          resetStateHighlight();
+          activeStateId = stateFeature.id;
+          statePathById.get(activeStateId)?.attr("fill", "#d62828");
+        }
+
+        tooltip
+          .style("opacity", 1)
+          .html(`<strong>${d.name}</strong><br/>
+          IATA: ${d.iata || "—"} / ICAO: ${d.icao || "—"}<br/>
+          ${d.city || "—"}, ${d.state || "—"}<br/>
+          州別：${stateFeature?.properties?.name || "—"}`);
+      })
+      .on("mousemove", (event) => {
+        tooltip
+          .style("left", `${event.pageX + 12}px`)
+          .style("top", `${event.pageY + 12}px`);
+      })
+      .on("mouseleave", () => {
+        tooltip.style("opacity", 0);
+        resetStateHighlight();
+      });
 
   return svg.node();
 }
 
 
 function _3(md){return(
-md`This dataset comes from the U.S. Census API and contains three columns: the estimated population (as a string), the two-digit state FIPS code, and the three-digit county FIPS code.`
+md`資料透過 OurAirports 的公開資料集載入，包含機場名稱、IATA、ICAO、城市、州與經緯度。`
 )}
 
-function _population(FileAttachment){return(
-FileAttachment("population.json").json()
-  .then((data) =>
-    data
-      .slice(1) // removes a header line
-      .map(([p, state, county]) => ({
-        state,
-        fips: `${state}${county}`,
-        population: +p
-      }))
+function _airports(d3){return(
+d3.csv("https://raw.githubusercontent.com/davidmegginson/ourairports-data/master/airports.csv", d => ({
+  name: d.name,
+  iata: d.iata_code,
+  icao: d.ident,
+  city: d.municipality,
+  state: d.iso_region?.replace("US-", ""),
+  lat: d.latitude_deg ? +d.latitude_deg : null,
+  lon: d.longitude_deg ? +d.longitude_deg : null,
+  type: d.type,
+  country: d.iso_country
+}))
+  .then((rows) =>
+    rows.filter(d =>
+      d.country === "US" &&
+      d.type === "large_airport" &&
+      d.iata &&
+      /international/i.test(d.name) &&
+      Number.isFinite(d.lat) &&
+      Number.isFinite(d.lon)
+    )
   )
 )}
 
 function _5(md){return(
-md`Since this dataset doesn’t include the positions of the counties, this _centroid_ helper method is used. It takes a (already projected) GeoJSON feature as input and returns the corresponding centroid.`
+md`地圖幾何資料來自 [TopoJSON U.S. Atlas](https://github.com/topojson/us-atlas)。`
 )}
 
-function _centroid(d3)
-{
-  const path = d3.geoPath();
-  return feature => path.centroid(feature);
-}
-
-
-function _7(md){return(
-md`The geometries used in this example are from the [TopoJSON U.S. Atlas](https://github.com/topojson/us-atlas), which are derived from the U.S. Census Bureau shapefiles. (There’s also the [TopoJSON World Atlas](https://github.com/topojson/world-atlas), which is derived from [Natural Earth](https://www.naturalearthdata.com).) The *counties* feature collection is all U.S. counties, using the five-digit FIPS identifier. The *statemap* lets us lookup the name of the state that contains a given county; a state’s two-digit identifier corresponds to the first two digits of its counties’ identifiers. Similarly, the *countymap* lets us lookup the name and geometry of each county.`
-)}
-
-function _us(FileAttachment){return(
-FileAttachment("counties-albers-10m.json").json()
-)}
-
-function _nation(topojson,us){return(
-topojson.feature(us, us.objects.nation)
-)}
-
-function _statemap(topojson,us){return(
-new Map(topojson.feature(us, us.objects.states).features.map(d => [d.id, d]))
-)}
-
-function _countymap(topojson,us){return(
-new Map(topojson.feature(us, us.objects.counties).features.map(d => [d.id, d]))
-)}
-
-function _12(md){return(
-md`The *statemesh* is just the internal borders between states, *i.e.*, everything but the coastlines and country borders. This avoids an additional stroke on the perimeter of the map, which would otherwise mask intricate features such as islands and inlets. (Try removing the last argument to topojson.mesh below to see the effect.)`
-)}
-
-function _statemesh(topojson,us){return(
-topojson.mesh(us, us.objects.states, (a, b) => a !== b)
-)}
-
-function _14(md){return(
-md`Using [Observable Plot](/plot/)’s concise API, a similar map can be produced with a few lines of code (see also the complete [Plot: U.S. bubble map example](/@observablehq/plot-us-bubble-map)).`
-)}
-
-function _15(Plot,nation,statemesh,population,countymap){return(
-Plot.plot({
-  width: 975,
-  projection: "identity",
-  marks: [
-    Plot.geo(nation, { fill: "#eee" }),
-    Plot.geo(statemesh, { stroke: "white" }),
-    Plot.dot(population, Plot.centroid({r: "population", geometry: ({fips}) => countymap.get(fips)}))
-  ]
-})
+function _us(d3){return(
+d3.json("https://cdn.jsdelivr.net/npm/us-atlas@3/states-10m.json")
 )}
 
 export default function define(runtime, observer) {
   const main = runtime.module();
   function toString() { return this.url; }
-  const fileAttachments = new Map([
-    ["population.json", {url: new URL("./files/beb56a2d9534662123fa352ffff2db8472e481776fcc1608ee4adbd532ea9ccf2f1decc004d57adc76735478ee68c0fd18931ba01fc859ee4901deb1bee2ed1b.json", import.meta.url), mimeType: "application/json", toString}],
-    ["counties-albers-10m.json", {url: new URL("./files/6b1776f5a0a0e76e6428805c0074a8f262e3f34b1b50944da27903e014b409958dc29b03a1c9cc331949d6a2a404c19dfd0d9d36d9c32274e6ffbc07c11350ee.json", import.meta.url), mimeType: "application/json", toString}]
-  ]);
+  const fileAttachments = new Map([]);
   main.builtin("FileAttachment", runtime.fileAttachments(name => fileAttachments.get(name)));
   main.variable(observer()).define(["md"], _1);
-  main.variable(observer("chart")).define("chart", ["population","countymap","statemap","d3","topojson","us","centroid"], _chart);
+  main.variable(observer("chart")).define("chart", ["airports","d3","topojson","us"], _chart);
   main.variable(observer()).define(["md"], _3);
-  main.variable(observer("population")).define("population", ["FileAttachment"], _population);
+  main.variable(observer("airports")).define("airports", ["d3"], _airports);
   main.variable(observer()).define(["md"], _5);
-  main.variable(observer("centroid")).define("centroid", ["d3"], _centroid);
-  main.variable(observer()).define(["md"], _7);
-  main.variable(observer("us")).define("us", ["FileAttachment"], _us);
-  main.variable(observer("nation")).define("nation", ["topojson","us"], _nation);
-  main.variable(observer("statemap")).define("statemap", ["topojson","us"], _statemap);
-  main.variable(observer("countymap")).define("countymap", ["topojson","us"], _countymap);
-  main.variable(observer()).define(["md"], _12);
-  main.variable(observer("statemesh")).define("statemesh", ["topojson","us"], _statemesh);
-  main.variable(observer()).define(["md"], _14);
-  main.variable(observer()).define(["Plot","nation","statemesh","population","countymap"], _15);
+  main.variable(observer("us")).define("us", ["d3"], _us);
   return main;
 }

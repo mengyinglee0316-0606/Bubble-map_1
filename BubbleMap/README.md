@@ -1,6 +1,6 @@
 # Bubble map
 
-https://observablehq.com/d/4fa643856b622029@499
+This version renders a U.S. airport bubble map using the OurAirports public dataset, loaded at runtime from GitHub.
 
 View this notebook in your browser by running a web server in this folder. For
 example:
