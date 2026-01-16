@@ -118,6 +118,7 @@ d3.csv("https://raw.githubusercontent.com/davidmegginson/ourairports-data/master
       d.country === "US" &&
       d.type === "large_airport" &&
       d.iata &&
+      /international/i.test(d.name) &&
       Number.isFinite(d.lat) &&
       Number.isFinite(d.lon)
     )
