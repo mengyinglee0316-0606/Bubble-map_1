@@ -4,6 +4,6 @@ This repository hosts the BubbleMap interactive template in the `BubbleMap` dire
 
 ## GitHub Pages Deployment
 
-A GitHub Actions workflow is included to publish the `BubbleMap` folder to GitHub Pages on every push to the `work` branch. After enabling GitHub Pages in the repository settings (set **Source** to **GitHub Actions**), the site will be available at the Pages URL shown in the workflow run summary.
+A GitHub Actions workflow is included to publish the `BubbleMap` folder to GitHub Pages on every push to the `main` or `work` branch. After enabling GitHub Pages in the repository settings (set **Source** to **GitHub Actions**), the site will be available at the Pages URL shown in the workflow run summary.
 
 If you use a different default branch, update `.github/workflows/deploy-pages.yml` to match.
