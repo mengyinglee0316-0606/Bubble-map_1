@@ -1,0 +1,14 @@
+{
+  "name": "4fa643856b622029",
+  "main": "4fa643856b622029@499.js",
+  "version": "499.0.0",
+  "homepage": "https://observablehq.com/d/4fa643856b622029",
+  "author": {
+    "name": "Mengyinglee0316-0606",
+    "url": "https://observablehq.com/@mengyinglee0316-0606"
+  },
+  "type": "module",
+  "peerDependencies": {
+    "@observablehq/runtime": "4 - 5"
+  }
+}
